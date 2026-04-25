@@ -32,26 +32,26 @@ const C = {
   textPrimary: "#ddeae4", textSecondary: "#8fa89a", textDim: "#506358",
   green: "#72c47e", greenD: "#4a9e5c",
   lake: "#5bb8c4", lakeD: "#2e7d8c",
-  gold: "#c9a84c", red: "#d9685e", purple: "#9b7fd4", peach: "#d4956a",
+  gold: "#c9a84c", red: "#d9685e", purple: "#9b7fd4", peach: "#9b7fd4",
   border: "#2a3d2e", borderLight: "#354a38", penalty: "#c0544a",
 };
 
 // ─── HABITS ─────────────────────────────────────────────────────────────────
 const HABITS = [
-  { id: "wake7",     label: "Wake up at 7am",    emoji: "🌅", points: 1, accent: C.gold   },
-  { id: "workout",   label: "Workout",            emoji: "💪", points: 3, accent: C.red    },
-  { id: "jumps",     label: "100 Jumps",          emoji: "🦘", points: 1, accent: C.red    },
-  { id: "breathing", label: "Morning Briefing",   emoji: "📰", points: 2, accent: C.lake   },
-  { id: "yoga",      label: "Yoga or Stretch",    emoji: "🧘", points: 2, accent: C.green  },
-  { id: "water",     label: "Drink Water",        emoji: "💧", points: 1, accent: C.lake   },
+  { id: "wake7",     label: "Wake up at 7am",    emoji: "🌅", points: 1, accent: C.peach  },
+  { id: "workout",   label: "Workout",            emoji: "💪", points: 3, accent: C.peach  },
+  { id: "jumps",     label: "100 Jumps",          emoji: "🦘", points: 1, accent: C.peach  },
+  { id: "breathing", label: "Morning Briefing",   emoji: "📰", points: 2, accent: C.peach  },
+  { id: "yoga",      label: "Yoga or Stretch",    emoji: "🧘", points: 2, accent: C.peach  },
+  { id: "water",     label: "Drink Water",        emoji: "💧", points: 1, accent: C.peach  },
   { id: "read",      label: "Read / Podcast",     emoji: "📖", points: 1, accent: C.peach  },
-  { id: "sleep",     label: "Sleep by 11pm",      emoji: "🌙", points: 4, accent: C.purple },
+  { id: "sleep",     label: "Sleep by 11pm",      emoji: "🌙", points: 4, accent: C.peach  },
 ];
 
 const REWARDS = [
   { id: "tier1", tier: 1, label: "Shopping Purchase", emoji: "🛍️", cost: 150 },
   { id: "tier2", tier: 2, label: "Hair & Nails",      emoji: "💅", cost: 200 },
-  { id: "tier3", tier: 3, label: "Spa / Big Pamper",  emoji: "🧖", cost: 250 },
+  { id: "tier3", tier: 3, label: "Spa Treatment",  emoji: "🧖", cost: 250 },
 ];
 
 const APRIL_GOALS = [
@@ -205,6 +205,127 @@ const S = {
 };
 
 // ─── APP ─────────────────────────────────────────────────────────────────────
+
+function CalendarTab({ ym, monthStart, monthName, today }) {
+  const [calY, calM] = ym.split("-").map(Number);
+  const firstDay = new Date(calY, calM - 1, 1).getDay();
+  const totalDays = daysInMonth(ym);
+  const maxPossibleDay = 15;
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const dayData = {};
+  allDaysInMonth(ym, monthStart).forEach(dateStr => {
+    const ch = loadDay(dateStr);
+    const st = calcStreaks(dateStr);
+    let pts = 0;
+    HABITS.forEach(h => { pts += habitEarned(h, st, ch); });
+    if (!ch["sleep"] && dateStr <= today) pts = Math.max(0, pts - 1);
+    const completedHabits = HABITS.filter(h => ch[h.id]);
+    dayData[dateStr] = { pts: +pts.toFixed(1), habits: completedHabits };
+  });
+
+  const weeks = [];
+  let day = 1 - firstDay;
+  while (day <= totalDays) {
+    const week = [];
+    for (let d = 0; d < 7; d++, day++) {
+      week.push(day >= 1 && day <= totalDays ? day : null);
+    }
+    weeks.push(week);
+  }
+
+  return React.createElement("div", { style:{ animation:"fadeUp 0.3s ease" } },
+    React.createElement("div", { style:{ textAlign:"center", marginBottom:14 } },
+      React.createElement("span", { style:{ color:C.textSecondary, fontSize:12, fontStyle:"italic" } }, monthName)
+    ),
+
+    // Day headers
+    React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3, marginBottom:4 } },
+      ["Su","Mo","Tu","We","Th","Fr","Sa"].map(d =>
+        React.createElement("div", { key:d, style:{ textAlign:"center", color:C.textDim, fontSize:10, fontWeight:"600" } }, d)
+      )
+    ),
+
+    // Grid
+    React.createElement("div", { style:{ display:"flex", flexDirection:"column", gap:3 } },
+      weeks.map((week, wi) =>
+        React.createElement("div", { key:wi, style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3 } },
+          week.map((day, di) => {
+            if (!day) return React.createElement("div", { key:di });
+            const dateStr = ym + "-" + String(day).padStart(2,"0");
+            const isToday = dateStr === today;
+            const isFuture = dateStr > today;
+            const isBeforeStart = dateStr < monthStart;
+            const data = dayData[dateStr];
+            const pts = data ? data.pts : 0;
+            const opacity = isFuture || isBeforeStart ? 0 : pts > 0 ? Math.min(1, 0.15 + (pts/maxPossibleDay)*0.85) : 0.06;
+            const isSelected = selectedDay === dateStr;
+            return React.createElement("div", {
+              key:di,
+              onClick: () => { if (!isFuture && !isBeforeStart) setSelectedDay(isSelected ? null : dateStr); },
+              style:{
+                aspectRatio:"1", borderRadius:8,
+                background: isFuture||isBeforeStart ? "transparent"
+                  : pts > 0 ? "rgba(155,127,212,"+opacity+")" : "rgba(255,255,255,0.04)",
+                border: isToday ? "1.5px solid "+C.purple
+                  : isSelected ? "1px solid "+C.purple+"88"
+                  : "1px solid "+(isFuture||isBeforeStart?"transparent":C.border),
+                display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                cursor: isFuture||isBeforeStart ? "default":"pointer",
+                transition:"all 0.15s",
+              }},
+              React.createElement("span", { style:{
+                fontSize:12, fontWeight:isToday?"700":"400",
+                color: isFuture||isBeforeStart ? C.textDim+"33" : pts>0 ? C.textPrimary : C.textDim,
+              }}, day),
+              pts > 0 && React.createElement("span", { style:{ fontSize:8, color:C.purple, fontWeight:"600", lineHeight:1 } },
+                pts % 1 === 0 ? String(pts) : pts.toFixed(1)
+              )
+            );
+          })
+        )
+      )
+    ),
+
+    // Legend
+    React.createElement("div", { style:{ display:"flex", alignItems:"center", gap:6, marginTop:14, justifyContent:"center" } },
+      React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "Less"),
+      [0.06,0.2,0.4,0.65,0.9].map((o,i) =>
+        React.createElement("div", { key:i, style:{ width:14, height:14, borderRadius:4,
+          background:"rgba(155,127,212,"+o+")", border:"1px solid "+C.border } })
+      ),
+      React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "More")
+    ),
+
+    // Selected day detail
+    selectedDay && dayData[selectedDay] && React.createElement("div", {
+      style:{ ...S.card, marginTop:14, animation:"fadeUp 0.2s ease" }
+    },
+      React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
+        React.createElement("span", { style:{ color:C.textPrimary, fontSize:13, fontWeight:"600" } },
+          new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{ weekday:"long", month:"short", day:"numeric" })
+        ),
+        React.createElement("span", { style:{ color:C.purple, fontSize:13, fontWeight:"700" } },
+          dayData[selectedDay].pts+" pts"
+        )
+      ),
+      dayData[selectedDay].habits.length === 0
+        ? React.createElement("p", { style:{ margin:0, color:C.textDim, fontSize:12, fontStyle:"italic" } }, "No habits logged.")
+        : React.createElement("div", { style:{ display:"flex", flexDirection:"column", gap:4 } },
+            dayData[selectedDay].habits.map(h =>
+              React.createElement("div", { key:h.id, style:{ display:"flex", alignItems:"center", gap:8 } },
+                React.createElement("div", { style:{ width:16, height:16, borderRadius:"50%", background:C.purple,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 } },
+                  React.createElement("span", { style:{ color:C.bg0, fontSize:9, fontWeight:"bold" } }, "✓")
+                ),
+                React.createElement("span", { style:{ color:C.textSecondary, fontSize:13 } }, h.emoji+" "+h.label)
+              )
+            )
+          )
+    )
+  );
+}
+
 function App() {
   const today = todayStr();
   const ym = monthKey(today);
@@ -465,7 +586,7 @@ function App() {
 
       // Tabs
       React.createElement("div", { style:S.tabBar },
-        [["habits","Habits"],["rewards","Rewards"],["history","History"]].map(([id,label]) =>
+        [["habits","Habits"],["calendar","Calendar"],["rewards","Rewards"],["history","History"]].map(([id,label]) =>
           React.createElement("button", { key:id, onClick:()=>setTab(id), style:{
             ...S.tabBtn,
             color:tab===id?C.textPrimary:C.textDim,
@@ -541,6 +662,10 @@ function App() {
         )
       ),
 
+
+      // ── CALENDAR TAB ──
+      tab === "calendar" && React.createElement(CalendarTab, { ym, monthStart, monthName, today }),
+
       // ── REWARDS TAB ──
       tab === "rewards" && React.createElement("div", { style:{animation:"fadeUp 0.3s ease"} },
         React.createElement("p", { style:{color:C.textDim,fontSize:12,marginBottom:16,fontStyle:"italic"} },
@@ -550,7 +675,7 @@ function App() {
           const unlocked = monthPts >= reward.cost;
           const isRedeemed = redeemed.find(r=>r.id===reward.id);
           const progress = Math.min(100,(monthPts/reward.cost)*100);
-          const tierColor = [C.gold,C.peach,C.purple][i];
+          const tierColor = [C.gold,"#d4956a",C.purple][i];
           return React.createElement("div", { key:reward.id, style:{...S.card,marginBottom:8} },
             React.createElement("div", { style:{display:"flex",alignItems:"center",gap:12,marginBottom:10} },
               React.createElement("div", { style:{flex:1} },
