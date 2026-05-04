@@ -389,7 +389,6 @@ function App() {
   const [tab,        setTab]        = useState("habits");
   const [message,    setMessage]    = useState("");
   const [loadingMsg, setLoadingMsg] = useState(false);
-  const [lastKey,    setLastKey]    = useState("__init__");
   const [justChecked,setJustChecked]= useState(null);
   const [monthlyQuote, setMonthlyQuote] = useState(() => ls.get("h_quote_" + ym) || "");
   const [showCloseout, setShowCloseout] = useState(false);
@@ -451,53 +450,50 @@ function App() {
   }, [ym]);
 
   // Local messages — instant, no API needed
-  const MESSAGES_START = [
-    "Good morning, Emily. Check off your first habit to get started.",
-    "A new day, a fresh start. What are we doing first today?",
-    "Every habit you check off is a vote for the person you're becoming.",
-    "Let's build something great today, one habit at a time.",
-  ];
-  const MESSAGES_PROGRESS = [
-    "Yes! Keep that momentum going. 🌿",
-    "You're doing it, Emily. One by one.",
-    "Look at you go. Keep crushing it.",
-    "That's the one. Keep stacking them up.",
-    "Good work. What's next?",
-    "She's unstoppable. Keep going. 🔥",
-    "Each one counts. You're building something real.",
-    "That's how it's done. Keep the streak alive.",
-    "Progress. Pure and simple. Keep going.",
-    "You didn't come this far to only come this far.",
-  ];
-  const MESSAGES_ALMOST = [
-    "Almost there, Emily. Finish strong. 💪",
-    "So close. Don't stop now.",
-    "The finish line is right there. Go get it.",
-    "Just a couple more. You've got this.",
-    "Nearly a perfect day. Push through.",
-  ];
-  const MESSAGES_COMPLETE = [
-    "PERFECT DAY. You absolutely crushed it, Emily. 🏆",
-    "Every single habit. That's elite. 🌟",
-    "Full marks. You showed up completely today.",
-    "That's what a great day looks like. Well done.",
-    "Flawless. The mountain would be proud. 🏔️",
-  ];
-
   useEffect(() => {
-    const key = JSON.stringify(checked);
-    if (key === lastKey) return;
-    setLastKey(key);
-    const completed = HABITS.filter(h => checked[h.id]).length;
+    const MSGS_START = [
+      "Good morning, Emily. Check off your first habit to get started.",
+      "A new day, a fresh start. What are we doing first today?",
+      "Every habit you check off is a vote for the person you are becoming.",
+      "Let's build something great today, one habit at a time.",
+    ];
+    const MSGS_PROGRESS = [
+      "Yes! Keep that momentum going.",
+      "You're doing it, Emily. One by one.",
+      "Look at you go. Keep crushing it.",
+      "That's the one. Keep stacking them up.",
+      "Good work. What's next?",
+      "She's unstoppable. Keep going.",
+      "Each one counts. You're building something real.",
+      "That's how it's done. Keep the streak alive.",
+      "Progress. Pure and simple. Keep going.",
+      "You didn't come this far to only come this far.",
+    ];
+    const MSGS_ALMOST = [
+      "Almost there, Emily. Finish strong.",
+      "So close. Don't stop now.",
+      "The finish line is right there. Go get it.",
+      "Just a couple more. You've got this.",
+      "Nearly a perfect day. Push through.",
+    ];
+    const MSGS_COMPLETE = [
+      "PERFECT DAY. You absolutely crushed it, Emily.",
+      "Every single habit. That's elite.",
+      "Full marks. You showed up completely today.",
+      "That's what a great day looks like. Well done.",
+      "Flawless. The mountain would be proud.",
+    ];
+
+    const completed = HABITS.filter(function(h) { return !!checked[h.id]; }).length;
     const total = HABITS.length;
-    let pool;
-    if (completed === 0) pool = MESSAGES_START;
-    else if (completed === total) pool = MESSAGES_COMPLETE;
-    else if (completed >= total - 2) pool = MESSAGES_ALMOST;
-    else pool = MESSAGES_PROGRESS;
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    var pool;
+    if (completed === 0) pool = MSGS_START;
+    else if (completed === total) pool = MSGS_COMPLETE;
+    else if (completed >= total - 2) pool = MSGS_ALMOST;
+    else pool = MSGS_PROGRESS;
+    var pick = pool[Math.floor(Math.random() * pool.length)];
     setMessage(pick);
-  }, [checked]);
+  }, [JSON.stringify(checked)]);
 
   function toggle(id) {
     setChecked(prev => { const next={...prev,[id]:!prev[id]}; saveDay(today,next); return next; });
