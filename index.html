@@ -46,6 +46,7 @@ const HABITS = [
   { id: "water",     label: "Drink Water",        emoji: "💧", points: 1, accent: C.peach  },
   { id: "read",      label: "Read / Podcast",     emoji: "📖", points: 1, accent: C.peach  },
   { id: "sleep",     label: "Sleep by 11pm",      emoji: "🌙", points: 4, accent: C.peach  },
+  { id: "routine",   label: "Morning & Night Routine", emoji: "✨", points: 1, accent: C.peach  },
 ];
 
 const REWARDS = [
@@ -124,7 +125,7 @@ function buildAnalytics(ym, startDate) {
   const today = todayStr();
   const passed = allDaysInMonth(ym, startDate).filter(d => d <= today);
   const totalDays = passed.length;
-  let totalPts = 0, sleepMisses = 0;
+  let totalPts = 0, sleepNights = 0;
   const counts = {};
   HABITS.forEach(h => { counts[h.id] = 0; });
   for (const day of passed) {
@@ -132,14 +133,14 @@ function buildAnalytics(ym, startDate) {
     for (const h of HABITS) {
       if (ch[h.id]) { counts[h.id]++; totalPts += habitEarned(h, st, ch); }
     }
-    if (!ch["sleep"] && day < today) sleepMisses++;
+    if (ch["sleep"]) sleepNights++;
   }
-  totalPts = +(totalPts - sleepMisses).toFixed(2);
+  totalPts = +totalPts.toFixed(2);
   const habitStats = HABITS.map(h => {
     const count = counts[h.id], rate = totalDays > 0 ? count/totalDays : 0;
     return { ...h, count, totalDays, rate, status: rate >= 0.75 ? "crushing" : rate < 0.30 ? "struggling" : "okay" };
   });
-  return { totalPts, sleepMisses, habitStats, totalDays, passedDays: passed.length };
+  return { totalPts, sleepNights, habitStats, totalDays, passedDays: passed.length };
 }
 
 // ─── AI ──────────────────────────────────────────────────────────────────────
@@ -162,11 +163,16 @@ async function getAIMessage(prompt, system, maxTokens) {
 const SUNNY_SYSTEM = "You are Sunny, Emily's warm personal habit coach. Brief, genuine, casual — like a friend. Use Emily's name sometimes. Vary responses. Occasional emojis. No more than 3 sentences.";
 
 const FALLBACK_QUOTES = [
-  "Rest is not idleness. To lie sometimes on the grass under trees on a summer's day is hardly a waste of time.",
+  "Rest is not idleness. To lie sometimes on the grass under trees on a summer\'s day is hardly a waste of time.",
+  "She is both hellfire and holy water. Make of that what you will.",
+  "The mountain doesn\'t care how tired you are. Go anyway.",
+  "You didn\'t come this far to only come this far.",
+  "Soft enough to feel everything. Strong enough to survive it.",
+  "Do it with everything you have or don\'t do it at all.",
+  "The world is wide and you are not too much for it.",
+  "She wasn\'t looking for a knight. She was looking for a sword.",
   "In every walk with nature, one receives far more than they seek.",
-  "The most important relationship you will ever have is the one you have with yourself.",
-  "Let your life be as quiet and unhurried as the turning of seasons.",
-  "You are allowed to be both a work in progress and a worthy person right now.",
+  "Be the kind of woman that makes other women want to up their game.",
 ];
 
 // ─── NOTIFICATIONS ───────────────────────────────────────────────────────────
@@ -206,125 +212,170 @@ const S = {
 
 // ─── APP ─────────────────────────────────────────────────────────────────────
 
-function CalendarTab({ ym, monthStart, monthName, today }) {
+function CalendarTab({ ym, monthStart, monthName, today, onDayDataChange }) {
   const [calY, calM] = ym.split("-").map(Number);
   const firstDay = new Date(calY, calM - 1, 1).getDay();
   const totalDays = daysInMonth(ym);
   const maxPossibleDay = 15;
   const [selectedDay, setSelectedDay] = useState(null);
+  const [dayChecked, setDayChecked] = useState({});
 
-  const dayData = {};
-  allDaysInMonth(ym, monthStart).forEach(dateStr => {
-    const ch = loadDay(dateStr);
-    const st = calcStreaks(dateStr);
-    let pts = 0;
-    HABITS.forEach(h => { pts += habitEarned(h, st, ch); });
-    if (!ch["sleep"] && dateStr < today) pts = Math.max(0, pts - 1);
-    const completedHabits = HABITS.filter(h => ch[h.id]);
-    dayData[dateStr] = { pts: +pts.toFixed(1), habits: completedHabits };
-  });
+  useEffect(() => {
+    if (selectedDay) setDayChecked(loadDay(selectedDay));
+  }, [selectedDay]);
+
+  function buildDayData() {
+    const result = {};
+    allDaysInMonth(ym, monthStart).forEach(dateStr => {
+      const ch = loadDay(dateStr);
+      const st = calcStreaks(dateStr);
+      let pts = HABITS.reduce((s,h) => s + habitEarned(h, st, ch), 0);
+      // no sleep penalty
+      result[dateStr] = { pts: +pts.toFixed(1) };
+    });
+    return result;
+  }
+
+  const [dayData, setDayData] = useState(() => buildDayData());
+
+  function toggleDayHabit(habitId) {
+    setDayChecked(prev => {
+      const next = { ...prev, [habitId]: !prev[habitId] };
+      saveDay(selectedDay, next);
+      setDayData(buildDayData());
+      if (onDayDataChange) onDayDataChange();
+      return next;
+    });
+  }
 
   const weeks = [];
   let day = 1 - firstDay;
   while (day <= totalDays) {
     const week = [];
-    for (let d = 0; d < 7; d++, day++) {
-      week.push(day >= 1 && day <= totalDays ? day : null);
-    }
+    for (let d = 0; d < 7; d++, day++) week.push(day >= 1 && day <= totalDays ? day : null);
     weeks.push(week);
   }
 
+  const selectedStreaks = selectedDay ? calcStreaks(selectedDay) : {};
+  const selectedPts = selectedDay
+    ? +HABITS.reduce((s,h) => s + habitEarned(h, selectedStreaks, dayChecked), 0).toFixed(2)
+    : 0;
+  const selDisplayDate = selectedDay
+    ? new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})
+    : "";
+
   return React.createElement("div", { style:{ animation:"fadeUp 0.3s ease" } },
+
     React.createElement("div", { style:{ textAlign:"center", marginBottom:14 } },
       React.createElement("span", { style:{ color:C.textSecondary, fontSize:12, fontStyle:"italic" } }, monthName)
     ),
 
-    // Day headers
     React.createElement("div", { style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3, marginBottom:4 } },
       ["Su","Mo","Tu","We","Th","Fr","Sa"].map(d =>
         React.createElement("div", { key:d, style:{ textAlign:"center", color:C.textDim, fontSize:10, fontWeight:"600" } }, d)
       )
     ),
 
-    // Grid
     React.createElement("div", { style:{ display:"flex", flexDirection:"column", gap:3 } },
       weeks.map((week, wi) =>
         React.createElement("div", { key:wi, style:{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3 } },
           week.map((day, di) => {
             if (!day) return React.createElement("div", { key:di });
             const dateStr = ym + "-" + String(day).padStart(2,"0");
-            const isToday = dateStr === today;
+            const isToday  = dateStr === today;
             const isFuture = dateStr > today;
             const isBeforeStart = dateStr < monthStart;
-            const data = dayData[dateStr];
-            const pts = data ? data.pts : 0;
-            const opacity = isFuture || isBeforeStart ? 0 : pts > 0 ? Math.min(1, 0.15 + (pts/maxPossibleDay)*0.85) : 0.06;
+            const pts = dayData[dateStr] ? dayData[dateStr].pts : 0;
+            const opacity = isFuture||isBeforeStart ? 0 : pts > 0 ? Math.min(1, 0.15+(pts/maxPossibleDay)*0.85) : 0.06;
             const isSelected = selectedDay === dateStr;
             return React.createElement("div", {
               key:di,
-              onClick: () => { if (!isFuture && !isBeforeStart) setSelectedDay(isSelected ? null : dateStr); },
+              onClick:()=>{ if(!isFuture&&!isBeforeStart) setSelectedDay(isSelected?null:dateStr); },
               style:{
                 aspectRatio:"1", borderRadius:8,
-                background: isFuture||isBeforeStart ? "transparent"
-                  : pts > 0 ? "rgba(155,127,212,"+opacity+")" : "rgba(255,255,255,0.04)",
-                border: isToday ? "1.5px solid "+C.purple
-                  : isSelected ? "1px solid "+C.purple+"88"
-                  : "1px solid "+(isFuture||isBeforeStart?"transparent":C.border),
+                background: isFuture||isBeforeStart?"transparent" : pts>0?"rgba(155,127,212,"+opacity+")":"rgba(255,255,255,0.04)",
+                border: isSelected?"1.5px solid "+C.purple : isToday?"1.5px solid "+C.green : "1px solid "+(isFuture||isBeforeStart?"transparent":C.border),
                 display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                cursor: isFuture||isBeforeStart ? "default":"pointer",
-                transition:"all 0.15s",
+                cursor:isFuture||isBeforeStart?"default":"pointer", transition:"all 0.15s",
               }},
               React.createElement("span", { style:{
-                fontSize:12, fontWeight:isToday?"700":"400",
-                color: isFuture||isBeforeStart ? C.textDim+"33" : pts>0 ? C.textPrimary : C.textDim,
+                fontSize:12, fontWeight:isToday||isSelected?"700":"400",
+                color:isFuture||isBeforeStart?C.textDim+"33":pts>0?C.textPrimary:C.textDim,
               }}, day),
               pts > 0 && React.createElement("span", { style:{ fontSize:8, color:C.purple, fontWeight:"600", lineHeight:1 } },
-                pts % 1 === 0 ? String(pts) : pts.toFixed(1)
-              )
+                pts%1===0?String(pts):pts.toFixed(1))
             );
           })
         )
       )
     ),
 
-    // Legend
     React.createElement("div", { style:{ display:"flex", alignItems:"center", gap:6, marginTop:14, justifyContent:"center" } },
       React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "Less"),
       [0.06,0.2,0.4,0.65,0.9].map((o,i) =>
-        React.createElement("div", { key:i, style:{ width:14, height:14, borderRadius:4,
-          background:"rgba(155,127,212,"+o+")", border:"1px solid "+C.border } })
+        React.createElement("div", { key:i, style:{ width:14, height:14, borderRadius:4, background:"rgba(155,127,212,"+o+")", border:"1px solid "+C.border } })
       ),
-      React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "More")
+      React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "More"),
+      React.createElement("div", { style:{ marginLeft:8, width:14, height:14, borderRadius:4, border:"1.5px solid "+C.green } }),
+      React.createElement("span", { style:{ color:C.textDim, fontSize:10 } }, "Today")
     ),
 
-    // Selected day detail
-    selectedDay && dayData[selectedDay] && React.createElement("div", {
-      style:{ ...S.card, marginTop:14, animation:"fadeUp 0.2s ease" }
-    },
-      React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 } },
-        React.createElement("span", { style:{ color:C.textPrimary, fontSize:13, fontWeight:"600" } },
-          new Date(selectedDay+"T12:00:00").toLocaleDateString("en-US",{ weekday:"long", month:"short", day:"numeric" })
+    selectedDay && React.createElement("div", { style:{ marginTop:16, animation:"fadeUp 0.25s ease" } },
+      React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center",
+        marginBottom:12, paddingBottom:10, borderBottom:"1px solid "+C.border } },
+        React.createElement("div", null,
+          React.createElement("div", { style:{ color:C.textPrimary, fontSize:13.5, fontWeight:"600" } }, selDisplayDate),
+          React.createElement("div", { style:{ color:C.textDim, fontSize:11, marginTop:2 } },
+            selectedDay===today ? "Today — tap to update" : "Tap habits to log retroactively"
+          )
         ),
-        React.createElement("span", { style:{ color:C.purple, fontSize:13, fontWeight:"700" } },
-          dayData[selectedDay].pts+" pts"
+        React.createElement("div", { style:{ background:"rgba(155,127,212,0.15)", border:"1px solid "+C.purple+"44",
+          borderRadius:10, padding:"4px 10px", textAlign:"center" } },
+          React.createElement("div", { style:{ color:C.purple, fontSize:15, fontWeight:"700" } }, selectedPts.toFixed(1)),
+          React.createElement("div", { style:{ color:C.textDim, fontSize:9 } }, "pts")
         )
       ),
-      dayData[selectedDay].habits.length === 0
-        ? React.createElement("p", { style:{ margin:0, color:C.textDim, fontSize:12, fontStyle:"italic" } }, "No habits logged.")
-        : React.createElement("div", { style:{ display:"flex", flexDirection:"column", gap:4 } },
-            dayData[selectedDay].habits.map(h =>
-              React.createElement("div", { key:h.id, style:{ display:"flex", alignItems:"center", gap:8 } },
-                React.createElement("div", { style:{ width:16, height:16, borderRadius:"50%", background:C.purple,
-                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 } },
-                  React.createElement("span", { style:{ color:C.bg0, fontSize:9, fontWeight:"bold" } }, "✓")
-                ),
-                React.createElement("span", { style:{ color:C.textSecondary, fontSize:13 } }, h.emoji+" "+h.label)
-              )
+
+      React.createElement("div", { style:{ display:"flex", flexDirection:"column", gap:4 } },
+        HABITS.map(habit => {
+          const done = !!dayChecked[habit.id];
+          const streakBefore = selectedStreaks[habit.id] || 0;
+          const currentStreak = streakBefore + (done?1:0);
+          const mult = streakMultiplier(streakBefore+1);
+          const earned = done ? +(habit.points*mult).toFixed(2) : 0;
+          const sl = streakLabel(currentStreak);
+          return React.createElement("div", {
+            key:habit.id,
+            onClick:()=>toggleDayHabit(habit.id),
+            style:{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+              borderRadius:10, cursor:"pointer", transition:"all 0.15s",
+              background:done?"rgba(155,127,212,0.10)":"rgba(255,255,255,0.03)",
+              border:"1px solid "+(done?C.purple+"33":C.border) }},
+            React.createElement("div", { style:{ width:20, height:20, borderRadius:"50%", flexShrink:0,
+              border:"1.5px solid "+(done?C.purple:C.borderLight), background:done?C.purple:"transparent",
+              display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.2s" }},
+              done && React.createElement("span", { style:{ color:C.bg0, fontSize:11, fontWeight:"bold" } }, "✓")
+            ),
+            React.createElement("span", { style:{ fontSize:18, flexShrink:0 } }, habit.emoji),
+            React.createElement("div", { style:{ flex:1, minWidth:0 } },
+              React.createElement("span", { style:{ color:done?C.textPrimary:C.textSecondary, fontSize:13, fontWeight:done?"500":"400" } }, habit.label),
+              sl && React.createElement("span", { style:{ marginLeft:8, fontSize:10, color:C.gold } }, sl),
+              
+            ),
+            React.createElement("span", { style:{ fontSize:12, fontWeight:"600", color:done?C.purple:C.textDim } },
+              done?"+"+(earned%1===0?earned:earned.toFixed(1)):mult>1?"+"+((habit.points*mult).toFixed(1)):"+"+habit.points
             )
-          )
+          );
+        })
+      ),
+
+      React.createElement("div", { style:{ marginTop:10, textAlign:"center" } },
+        React.createElement("span", { style:{ color:C.textDim, fontSize:11, fontStyle:"italic" } }, "Changes save automatically ✓")
+      )
     )
   );
 }
+
 
 function App() {
   const today = todayStr();
@@ -338,7 +389,7 @@ function App() {
   const [tab,        setTab]        = useState("habits");
   const [message,    setMessage]    = useState("");
   const [loadingMsg, setLoadingMsg] = useState(false);
-  const [lastKey,    setLastKey]    = useState("");
+  const [lastKey,    setLastKey]    = useState("__init__");
   const [justChecked,setJustChecked]= useState(null);
   const [monthlyQuote, setMonthlyQuote] = useState(() => ls.get("h_quote_" + ym) || "");
   const [showCloseout, setShowCloseout] = useState(false);
@@ -353,7 +404,7 @@ function App() {
   const todayPts   = calcDayPts(checked, streaks);
   const isComplete = HABITS.every(h => checked[h.id]);
   const monthPts   = analytics.totalPts;
-  const sleepPens  = analytics.sleepMisses;
+  const sleepNights = analytics.sleepNights;
   const redeemed   = monthMeta.redeemedRewards || [];
   const nextReward = REWARDS.find(r => monthPts < r.cost);
   const allMonthDays = allDaysInMonth(ym, monthStart);
@@ -389,7 +440,7 @@ function App() {
     };
     const mn = new Date(+y, +mo-1, 1).toLocaleString("en-US", { month: "long" });
     getAIMessage(
-      "Write one short beautiful quote (1-2 sentences) for " + mn + ". Theme: living gently and intentionally, at peace with yourself and the natural world. Return ONLY the quote text itself, no quotation marks, no attribution, nothing else.",
+      "Write one short quote (1-2 sentences) for " + mn + ". Mix it up — sometimes make it peaceful and grounded (living gently, at peace with nature), sometimes make it badass and bold (fierce, empowering, warrior-spirit), sometimes witty or unexpected. Vary the tone so it feels surprising. Return ONLY the quote text itself, no quotation marks, no attribution, nothing else.",
       "You write spare luminous quotes like a breath of mountain air. Never cliched. Grounded, quiet, true. Return only the raw quote text.",
       80
     ).then(q => {
@@ -447,11 +498,11 @@ function App() {
     const crushing   = finalA.habitStats.filter(h=>h.status==="crushing").map(h=>h.label+" ("+Math.round(h.rate*100)+"%)");
     const struggling = finalA.habitStats.filter(h=>h.status==="struggling").map(h=>h.label+" ("+Math.round(h.rate*100)+"%)");
     const recap = await getAIMessage(
-      "Month: "+monthName+". Emily's score: "+finalA.totalPts.toFixed(1)+" pts over "+finalA.totalDays+" days. Sleep penalties: "+finalA.sleepMisses+". Crushing: "+(crushing.join(",")||"none")+". Struggling: "+(struggling.join(",")||"none")+". Warm honest 3-4 sentence recap. One actionable tip for next month.",
+      "Month: "+monthName+". Emily's score: "+finalA.totalPts.toFixed(1)+" pts over "+finalA.totalDays+" days. Nights to bed by 11pm: "+finalA.sleepNights+". Crushing: "+(crushing.join(",")||"none")+". Struggling: "+(struggling.join(",")||"none")+". Warm honest 3-4 sentence recap. One actionable tip for next month.",
       "You are Sunny, Emily's warm habit coach giving a monthly wrap-up. Honest, warm, specific. End with one tip.", 200
     );
     const entry = { ym, monthName, totalPts:finalA.totalPts, totalDays:finalA.totalDays,
-      sleepMisses:finalA.sleepMisses, habitStats:finalA.habitStats,
+      sleepNights:finalA.sleepNights, habitStats:finalA.habitStats,
       redeemed:monthMeta.redeemedRewards||[], recap };
     const updated = [entry, ...archived];
     setArchived(updated); saveArchived(updated);
@@ -473,7 +524,7 @@ function App() {
         ),
         React.createElement("div", { style:{...S.card,textAlign:"center",marginBottom:10} },
           React.createElement("div", { style:{fontSize:48,fontWeight:"700",color:C.lake,lineHeight:1} }, arc.totalPts.toFixed(1)),
-          React.createElement("div", { style:{color:C.textSecondary,fontSize:13,marginTop:4} }, "points · " + arc.sleepMisses + " sleep " + (arc.sleepMisses===1?"penalty":"penalties")),
+          React.createElement("div", { style:{color:C.textSecondary,fontSize:13,marginTop:4} }, "points · " + arc.sleepNights + " early night" + (arc.sleepNights!==1?"s":"")),
           goalHit && React.createElement("div", { style:{marginTop:12,display:"inline-flex",alignItems:"center",gap:8,
             background:goalHit.color+"18",border:"1px solid "+goalHit.color+"44",borderRadius:20,padding:"6px 16px"} },
             React.createElement("span", null, goalHit.emoji),
@@ -576,7 +627,7 @@ function App() {
           [
             {label:"Today", value:"+"+todayPts.toFixed(1), color:C.textPrimary},
             {label:"Month", value:monthPts.toFixed(1)+" pts", color:C.lake},
-            {label:"Penalties", value:"−"+sleepPens, color:sleepPens>0?C.penalty:C.textDim},
+            {label:"Early Nights", value:sleepNights+"🌙", color:C.purple},
           ].map((s,i) => React.createElement("div", { key:i, style:{textAlign:"center"} },
             React.createElement("div", { style:{fontSize:15,fontWeight:"700",color:s.color} }, s.value),
             React.createElement("div", { style:{fontSize:10,color:C.textDim,marginTop:2} }, s.label)
@@ -664,7 +715,7 @@ function App() {
 
 
       // ── CALENDAR TAB ──
-      tab === "calendar" && React.createElement(CalendarTab, { ym, monthStart, monthName, today }),
+      tab === "calendar" && React.createElement(CalendarTab, { ym, monthStart, monthName, today, onDayDataChange: () => setAnalytics(buildAnalytics(ym, monthStart)) }),
 
       // ── REWARDS TAB ──
       tab === "rewards" && React.createElement("div", { style:{animation:"fadeUp 0.3s ease"} },
@@ -699,11 +750,11 @@ function App() {
         }),
         React.createElement("div", {style:{...S.card,marginTop:8,borderColor:C.penalty+"22"}},
           React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
-            React.createElement("span", {style:{color:C.textSecondary,fontSize:13}}, "Sleep Penalties"),
-            React.createElement("span", {style:{color:C.penalty,fontSize:13,fontWeight:"600"}}, "−"+sleepPens+" pts")
+            React.createElement("span", {style:{color:C.textSecondary,fontSize:13}}, "🌙 Early Nights"),
+            React.createElement("span", {style:{color:C.purple,fontSize:13,fontWeight:"600"}}, sleepNights+" nights")
           ),
           React.createElement("p", {style:{margin:"8px 0 0",color:C.textDim,fontSize:12,lineHeight:1.6}},
-            sleepPens===0 ? "None so far this month — great!" : "You've missed "+sleepPens+" night"+(sleepPens!==1?"s":"")+" this month."
+            sleepNights===0 ? "No early nights yet this month — aim for 11pm!" : "You've made it to bed on time "+sleepNights+" night"+(sleepNights!==1?"s":"")+" this month. Keep it up!"
           )
         )
       ),
@@ -723,7 +774,7 @@ function App() {
                   React.createElement("div", null,
                     React.createElement("div", {style:{color:C.textPrimary,fontSize:13.5,fontWeight:"500"}}, arc.monthName),
                     React.createElement("div", {style:{color:C.textDim,fontSize:11,marginTop:2}},
-                      arc.totalDays+" days · "+arc.sleepMisses+" sleep "+(arc.sleepMisses===1?"penalty":"penalties"))
+                      arc.totalDays+" days · "+arc.sleepNights+" early night"+(arc.sleepNights!==1?"s":""))
                   ),
                   React.createElement("div", {style:{textAlign:"right"}},
                     React.createElement("div", {style:{color:C.lake,fontSize:18,fontWeight:"700"}}, arc.totalPts.toFixed(1)),
