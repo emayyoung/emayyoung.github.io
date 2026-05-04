@@ -1,4 +1,4 @@
-const CACHE = "emily-habit-v1";
+const CACHE = "emily-habit-v3";
 const ASSETS = ["/", "/index.html"];
 
 // ── Install ──────────────────────────────────────────────────────────────────

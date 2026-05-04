@@ -30,7 +30,7 @@ const { useState, useEffect, useRef } = React;
 const C = {
   bg0: "#0e1812", bg1: "#152318", bg2: "#1c2e1f",
   textPrimary: "#ddeae4", textSecondary: "#8fa89a", textDim: "#506358",
-  green: "#72c47e", greenD: "#4a9e5c",
+  green: "#4a5e2e", greenD: "#3a4d22",
   lake: "#5bb8c4", lakeD: "#2e7d8c",
   gold: "#c9a84c", red: "#d9685e", purple: "#9b7fd4", peach: "#9b7fd4",
   border: "#2a3d2e", borderLight: "#354a38", penalty: "#c0544a",
@@ -38,15 +38,15 @@ const C = {
 
 // ─── HABITS ─────────────────────────────────────────────────────────────────
 const HABITS = [
-  { id: "wake7",     label: "Wake up at 7am",    emoji: "🌅", points: 1, accent: C.peach  },
-  { id: "workout",   label: "Workout",            emoji: "💪", points: 3, accent: C.peach  },
-  { id: "jumps",     label: "100 Jumps",          emoji: "🦘", points: 1, accent: C.peach  },
-  { id: "breathing", label: "Morning Briefing",   emoji: "📰", points: 2, accent: C.peach  },
-  { id: "yoga",      label: "Yoga or Stretch",    emoji: "🧘", points: 2, accent: C.peach  },
-  { id: "water",     label: "Drink Water",        emoji: "💧", points: 1, accent: C.peach  },
-  { id: "read",      label: "Read / Podcast",     emoji: "📖", points: 1, accent: C.peach  },
-  { id: "sleep",     label: "Sleep by 11pm",      emoji: "🌙", points: 4, accent: C.peach  },
+  { id: "wake7",     label: "Wake up at 7am",         emoji: "🌅", points: 1, accent: C.peach  },
+  { id: "workout",   label: "Workout",                 emoji: "💪", points: 3, accent: C.peach  },
+  { id: "breathing", label: "Morning Briefing",        emoji: "📰", points: 2, accent: C.peach  },
+  { id: "yoga",      label: "Yoga or Stretch",         emoji: "🧘", points: 2, accent: C.peach  },
+  { id: "jumps",     label: "100 Jumps",               emoji: "🦘", points: 1, accent: C.peach  },
+  { id: "water",     label: "Drink Water",             emoji: "💧", points: 1, accent: C.peach  },
+  { id: "read",      label: "Read / Podcast",          emoji: "📖", points: 1, accent: C.peach  },
   { id: "routine",   label: "Morning & Night Routine", emoji: "✨", points: 1, accent: C.peach  },
+  { id: "sleep",     label: "Sleep by 11pm",           emoji: "🌙", points: 4, accent: C.peach  },
 ];
 
 const REWARDS = [
@@ -450,27 +450,53 @@ function App() {
     }).catch(useFallback);
   }, [ym]);
 
-  // AI daily message
+  // Local messages — instant, no API needed
+  const MESSAGES_START = [
+    "Good morning, Emily. Check off your first habit to get started.",
+    "A new day, a fresh start. What are we doing first today?",
+    "Every habit you check off is a vote for the person you're becoming.",
+    "Let's build something great today, one habit at a time.",
+  ];
+  const MESSAGES_PROGRESS = [
+    "Yes! Keep that momentum going. 🌿",
+    "You're doing it, Emily. One by one.",
+    "Look at you go. Keep crushing it.",
+    "That's the one. Keep stacking them up.",
+    "Good work. What's next?",
+    "She's unstoppable. Keep going. 🔥",
+    "Each one counts. You're building something real.",
+    "That's how it's done. Keep the streak alive.",
+    "Progress. Pure and simple. Keep going.",
+    "You didn't come this far to only come this far.",
+  ];
+  const MESSAGES_ALMOST = [
+    "Almost there, Emily. Finish strong. 💪",
+    "So close. Don't stop now.",
+    "The finish line is right there. Go get it.",
+    "Just a couple more. You've got this.",
+    "Nearly a perfect day. Push through.",
+  ];
+  const MESSAGES_COMPLETE = [
+    "PERFECT DAY. You absolutely crushed it, Emily. 🏆",
+    "Every single habit. That's elite. 🌟",
+    "Full marks. You showed up completely today.",
+    "That's what a great day looks like. Well done.",
+    "Flawless. The mountain would be proud. 🏔️",
+  ];
+
   useEffect(() => {
     const key = JSON.stringify(checked);
     if (key === lastKey) return;
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      setLoadingMsg(true);
-      const completed  = HABITS.filter(h => checked[h.id]).map(h => h.label);
-      const remaining  = HABITS.filter(h => !checked[h.id]).map(h => h.label);
-      const hotStreaks = HABITS
-        .map(h => ({ label:h.label, streak:(streaks[h.id]||0)+(checked[h.id]?1:0) }))
-        .filter(s => s.streak >= 3).map(s => s.label + " (" + s.streak + "d)");
-      const prompt = isComplete
-        ? "Emily completed ALL habits today! " + todayPts.toFixed(1) + " pts." + (hotStreaks.length?" Streaks: "+hotStreaks.join(", "):"")+". Celebrate, 2-3 sentences."
-        : completed.length === 0
-        ? "Emily hasn't started yet. To do: " + remaining.join(", ") + ". Warm nudge, 2-3 sentences."
-        : "Emily done: " + completed.join(", ") + " (" + todayPts.toFixed(1) + " pts). Remaining: " + remaining.join(", ") + (hotStreaks.length?". Streaks: "+hotStreaks.join(", "):"")+". Encourage her, 2-3 sentences.";
-      const msg = await getAIMessage(prompt, SUNNY_SYSTEM);
-      setMessage(msg); setLoadingMsg(false); setLastKey(key);
-    }, 1000);
-    return () => clearTimeout(timerRef.current);
+    setLastKey(key);
+    const completed = HABITS.filter(h => checked[h.id]).length;
+    const total = HABITS.length;
+    let pool;
+    if (completed === 0) pool = MESSAGES_START;
+    else if (completed === total) pool = MESSAGES_COMPLETE;
+    else if (completed >= total - 2) pool = MESSAGES_ALMOST;
+    else pool = MESSAGES_PROGRESS;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    setMessage(pick);
   }, [checked]);
 
   function toggle(id) {
@@ -618,14 +644,14 @@ function App() {
               ),
               React.createElement("div", { style:S.barTrack },
                 React.createElement("div", { style:{...S.barFill,width:progress+"%",
-                  background:hit?"linear-gradient(90deg,"+goal.color+"99,"+goal.color+")":"linear-gradient(90deg,"+C.textDim+","+C.textSecondary+")"} })
+                  background:"linear-gradient(90deg,#2e7d8c,#5bb8c4)"} })
               )
             );
           })
         ),
         React.createElement("div", { style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:1,marginTop:14,paddingTop:14,borderTop:"1px solid "+C.border} },
           [
-            {label:"Today", value:"+"+todayPts.toFixed(1), color:C.textPrimary},
+            {label:"Today", value:"+"+todayPts.toFixed(1), color:"#d4956a"},
             {label:"Month", value:monthPts.toFixed(1)+" pts", color:C.lake},
             {label:"Early Nights", value:sleepNights+"🌙", color:C.purple},
           ].map((s,i) => React.createElement("div", { key:i, style:{textAlign:"center"} },
@@ -662,9 +688,8 @@ function App() {
         React.createElement("div", { style:{...S.card,display:"flex",gap:10,alignItems:"flex-start",marginBottom:12} },
           React.createElement("span", { style:{fontSize:17,flexShrink:0,marginTop:1} }, "🌿"),
           React.createElement("p", { style:{margin:0,color:C.textSecondary,fontSize:13,lineHeight:1.65,fontStyle:"italic",
-            opacity:loadingMsg?0.5:1,transition:"opacity 0.3s"} },
-            loadingMsg ? (monthlyQuote || "…")
-              : (message || "Good morning, Emily. Check off your first habit to get started.")
+            opacity:1} },
+            message || "Good morning, Emily. Check off your first habit to get started."
           )
         ),
 
